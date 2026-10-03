@@ -78,7 +78,9 @@ export type KnownProvider =
 	| "xiaomi"
 	| "xiaomi-token-plan-cn"
 	| "xiaomi-token-plan-ams"
-	| "xiaomi-token-plan-sgp";
+	| "xiaomi-token-plan-sgp"
+	| "stepfun-step-plan"
+	| "stepfun-ai-step-plan";
 export type ProviderId = KnownProvider | string;
 
 export type ToolChoice = "auto" | "none";

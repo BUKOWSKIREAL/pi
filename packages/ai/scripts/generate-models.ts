@@ -2663,6 +2663,62 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 		}
 
 		console.log(`Loaded ${models.length} tool-capable models from models.dev`);
+
+		// Step Plan is StepFun's subscription channel — monthly Credit pool rather
+		// than per-token billing, reached through the dedicated `step_plan` path on
+		// both the China (api.stepfun.com) and international (api.stepfun.ai)
+		// endpoints. models.dev keys them as "stepfun-step-plan" /
+		// "stepfun-ai-step-plan" and reports no per-token cost, which is correct:
+		// the subscription swallows metering. Each stepfun model also exists on the
+		// metered /v1 endpoint (separate provider entries), so keep the Step Plan
+		// catalog restricted to the step_plan baseUrl.
+		const stepfunStepPlanVariants = [
+			{
+				source: "stepfun-step-plan",
+				provider: "stepfun-step-plan",
+				baseUrl: "https://api.stepfun.com/step_plan/v1",
+			},
+			{
+				source: "stepfun-ai-step-plan",
+				provider: "stepfun-ai-step-plan",
+				baseUrl: "https://api.stepfun.ai/step_plan/v1",
+			},
+		] as const;
+
+		for (const { source, provider, baseUrl } of stepfunStepPlanVariants) {
+			const providerModels = data[source]?.models;
+			for (const [modelId, model] of Object.entries(providerModels ?? {})) {
+				const m = model as ModelsDevModel;
+				if (m.tool_call !== true) continue;
+				const thinkingLevelMap = getEffortThinkingLevelMap(m.reasoning_options ?? []);
+
+				models.push({
+					id: modelId,
+					name: m.name || modelId,
+					api: "openai-completions",
+					provider,
+					baseUrl,
+					compat: {
+						supportsDeveloperRole: false,
+						supportsStore: false,
+						...(thinkingLevelMap ? { supportsReasoningEffort: true } : {}),
+					},
+					...(thinkingLevelMap ? { thinkingLevelMap } : {}),
+					reasoning: m.reasoning === true,
+					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					cost: {
+						input: m.cost?.input || 0,
+						output: m.cost?.output || 0,
+						cacheRead: m.cost?.cache_read || 0,
+						cacheWrite: m.cost?.cache_write || 0,
+					},
+					contextWindow: m.limit?.context || 4096,
+					maxTokens: m.limit?.output || 4096,
+				});
+				recordModelsDevReasoningOptions(provider, modelId, m);
+			}
+		}
+
 		return models;
 	} catch (error) {
 		console.error("Failed to load models.dev data:", error);
